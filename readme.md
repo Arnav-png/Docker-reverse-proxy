@@ -21,3 +21,4 @@ The architecture consists of the following components:
         Utilizes dockerode, a Docker API client for Node.js, to interact with the Docker daemon for container management.
 
 
+![image](https://github.com/user-attachments/assets/a386edd5-22a5-4171-b7e1-24c70da7a42e)
