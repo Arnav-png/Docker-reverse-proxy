@@ -1,6 +1,6 @@
 Project Description
 
-This project is a reverse proxy management application built with Node.js and Express, designed to dynamically manage Docker containers. It allows users to register and route requests to specific containers based on subdomains. The application listens for Docker container events and automatically updates its routing table when containers are started. This simplifies the process of managing multiple microservices deployed as Docker containers.
+This project is a reverse proxy built with typescript,http-proxy and Express, designed to dynamically manage Docker containers. It dynamically registers and routes requests to specific containers based on subdomains. The application listens for Docker container events and automatically updates its routing table when containers are started. This simplifies the process of managing multiple microservices deployed as Docker containers.
 Architecture Overview
 
 The architecture consists of the following components:
