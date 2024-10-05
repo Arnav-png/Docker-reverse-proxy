@@ -2,36 +2,53 @@ const http = require('http');
 const express = require('express');
 const Docker = require('dockerode');
 const httpProxy = require('http-proxy');
+const { createClient } = require('redis');
+const cors = require('cors');
 
 const managementApi = express();
 const proxy = httpProxy.createProxy({});
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 managementApi.use(express.json());
+managementApi.use(cors())
 
-const db = new Map();
+const redis = createClient({
+    url: 'redis://redis:6379' // Connect using the service name
+});
 
+
+(async () => {
+    try {
+        await redis.connect()
+        await redis.set('test_key', 'Hello, Redis!');
+        const value = await redis.get('test_key');
+        console.log('Value from Redis:', value); // Should log "Hello, Redis!"
+    } catch (error) {
+        console.error('Error connecting to Redis:', error);
+    }
+})();
+
+
+redis.on('error', (error) => console.log('Redis error:', error));
+
+// Docker event handling
 docker.getEvents((err, stream) => {
-    console.log('got event')
     if (err) {
-        console.log(err);
+        console.error(err);
         return;
     }
 
     stream.on('data', async (chunk) => {
-        if (!chunk) return;
-
         const event = JSON.parse(chunk.toString());
-        console.log("🚀 ~ stream.on ~ event:", event)
         if (event.Type === 'container' && event.Action === 'start') {
             const container = docker.getContainer(event.id);
             const containerInfo = await container.inspect();
 
             const containerName = containerInfo.Name.substring(1);
             const ipAddress = containerInfo.NetworkSettings.IPAddress;
-
             const exposedPort = Object.keys(containerInfo.Config.ExposedPorts);
             let defaultPort;
-            if (exposedPort?.length > 0) {
+
+            if (exposedPort.length > 0) {
                 const [port, type] = exposedPort[0].split('/');
                 if (type === 'tcp') {
                     defaultPort = port;
@@ -39,45 +56,35 @@ docker.getEvents((err, stream) => {
             }
 
             console.log(`Registering ${containerName} ---> http://${ipAddress}:${defaultPort}`);
-            db.set(containerName, { containerName, ipAddress, defaultPort });
+            await redis.hSet(containerName, 'ipAddress', ipAddress, 'defaultPort', defaultPort);
         }
     });
 });
 
+// Reverse proxy setup
 const reverseProxyApp = express();
-reverseProxyApp.use((req, res) => {
+reverseProxyApp.use(async (req, res) => {
     const hostname = req.headers.host;
     const subdomain = hostname.split('.')[0];
 
-    if (!db.has(subdomain)) {
+    const containerData = await redis.hGetAll(subdomain);
+    if (!Object.keys(containerData).length) {
         return res.status(404).end('404 Not Found');
     }
 
-    const { ipAddress, defaultPort } = db.get(subdomain);
+    const { ipAddress, defaultPort } = containerData;
     const target = `http://${ipAddress}:${defaultPort}`;
 
     console.log(`Forwarding ${hostname} -> ${target}`);
     return proxy.web(req, res, { target, changeOrigin: true });
 });
 
-const reverseProxy = http.createServer(reverseProxyApp);
-
+// Management API route
 managementApi.post('/containers', async (req, res) => {
     const { image, tag = 'latest' } = req.body;
     const images = await docker.listImages();
 
-    console.log(images , 'these are my images')
-    let imageAlreadyExist = false;
-    for (const img in images){
-        for(const tag in images.RepoTags){
-            if(img === `${image}:${tag}`){
-                imageAlreadyExist=true
-                break
-            }
-        }
-        if (imageAlreadyExist) break
-       
-    }
+    let imageAlreadyExist = images.some(img => img.RepoTags?.includes(`${image}:${tag}`));
 
     if (!imageAlreadyExist) {
         console.log('Pulling image from Docker:', `${image}:${tag}`);
@@ -104,6 +111,7 @@ managementApi.listen(8080, () => {
     console.log('Management API started at port 8080');
 });
 
+const reverseProxy = http.createServer(reverseProxyApp);
 reverseProxy.listen(80, () => {
     console.log('Reverse proxy listening on port 80');
 });
