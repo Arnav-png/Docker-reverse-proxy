@@ -10,14 +10,14 @@ managementApi.use(express.json());
 
 const db = new Map();
 
-docker.getEvents((err, stream) => {
+docker.getEvents((err:any, stream:any) => {
     console.log('got event')
     if (err) {
         console.log(err);
         return;
     }
 
-    stream.on('data', async (chunk) => {
+    stream.on('data', async (chunk:any) => {
         if (!chunk) return;
 
         const event = JSON.parse(chunk.toString());
@@ -45,7 +45,7 @@ docker.getEvents((err, stream) => {
 });
 
 const reverseProxyApp = express();
-reverseProxyApp.use((req, res) => {
+reverseProxyApp.use((req:any, res:any) => {
     const hostname = req.headers.host;
     const subdomain = hostname.split('.')[0];
 
@@ -62,7 +62,7 @@ reverseProxyApp.use((req, res) => {
 
 const reverseProxy = http.createServer(reverseProxyApp);
 
-managementApi.post('/containers', async (req, res) => {
+managementApi.post('/containers', async (req:any, res:any) => {
     const { image, tag = 'latest' } = req.body;
     const images = await docker.listImages();
 

@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: DockerFile.dev
-    command: npm run start
+    command: npm run build-start
     ports:
       - "8080:8080"
       - "80:80"
